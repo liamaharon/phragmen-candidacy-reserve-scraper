@@ -30,9 +30,10 @@ export async function insertEvent(
   db: Database<sqlite3.Database, sqlite3.Statement>,
   blockNumber: number,
   eventType: string,
-  amount: number,
+  amount: string,
   who: string,
 ): Promise<void> {
+  console.log("insert", blockNumber, eventType, amount, who);
   await db.run(
     `INSERT OR REPLACE INTO events (block_number, event_type, amount, who) VALUES (?, ?, ?, ?)`,
     [blockNumber, eventType, amount, who],
@@ -43,10 +44,13 @@ export async function setLastProcessedBlock(
   db: Database<sqlite3.Database, sqlite3.Statement>,
   blockNumber: number,
 ): Promise<void> {
-  await db.run(
-    `INSERT OR REPLACE INTO last_processed_block (block_number) VALUES (?)`,
-    [blockNumber],
-  );
+  // Clear the existing entry
+  await db.run(`DELETE FROM last_processed_block`);
+
+  // Insert the new block number
+  await db.run(`INSERT INTO last_processed_block (block_number) VALUES (?)`, [
+    blockNumber,
+  ]);
 }
 
 export async function getLastProcessedBlock(
@@ -56,29 +60,7 @@ export async function getLastProcessedBlock(
     `SELECT block_number FROM last_processed_block`,
   );
   // this is the first block number with the electionsPhragmen event on Polkadot
-  return row ? row.block_number : 746096;
-}
-
-export async function calculateNetReserves(): Promise<void> {
-  const db = await openDb();
-
-  try {
-    const rows = await db.all(`
-      SELECT who, 
-             SUM(CASE WHEN event_type = 'reserve' THEN amount ELSE 0 END) - 
-             SUM(CASE WHEN event_type = 'unreserve' THEN amount ELSE 0 END) AS net_reserve
-      FROM events
-      GROUP BY who
-    `);
-
-    rows.forEach((row) => {
-      console.log(`Address: ${row.who}, Net Reserve: ${row.net_reserve}`);
-    });
-  } catch (error) {
-    console.error("Error while calculating net reserves:", error);
-  } finally {
-    await db.close();
-  }
+  return row ? row.block_number : 746095;
 }
 
 export interface NetReserveRow {
@@ -86,29 +68,19 @@ export interface NetReserveRow {
   net_reserve: number;
 }
 
-export async function fetchNetReserves(
+export function fetchNetReserves(
   db: Database<sqlite3.Database, sqlite3.Statement>,
 ): Promise<NetReserveRow[]> {
-  try {
-    return await db.all<NetReserveRow[]>(`
+  return db.all<NetReserveRow[]>(`
       SELECT who, 
              SUM(CASE WHEN event_type = 'reserve' THEN amount ELSE 0 END) - 
              SUM(CASE WHEN event_type = 'unreserve' THEN amount ELSE 0 END) AS net_reserve
       FROM events
       GROUP BY who
     `);
-  } catch (error) {
-    console.error("Error while fetching net reserves:", error);
-    throw error; // rethrow the error to be handled by the caller
-  } finally {
-    await db.close();
-  }
 }
 
-export async function writeToCSV(
-  rows: NetReserveRow[],
-  filePath: string,
-): Promise<void> {
+export function writeToCSV(rows: NetReserveRow[], filePath: string) {
   const writeStream = fs.createWriteStream(filePath);
   writeStream.write("Address,Net Reserve\n");
 
