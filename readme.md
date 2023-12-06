@@ -7,3 +7,7 @@ Scrapes every candidacy-related reserve / unreserve event from the chain and sav
 Once all scraped, writes out a csv of any imbalances.
 
 Supports Polkadot and Kusama.
+
+## Usage
+
+`ts-node src/index.ts polkadot|kusama wss://some-rpc.io`

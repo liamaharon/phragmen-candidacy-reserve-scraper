@@ -13,7 +13,6 @@ import { BN } from "@polkadot/util";
 import { Bar, Presets } from "cli-progress";
 
 interface Preset {
-  rpc: string;
   // the block *before* the first block with an event we want to scrape
   startBlock: number;
   symbol: string;
@@ -22,13 +21,11 @@ interface Preset {
 
 const PRESETS: { [key: string]: Preset } = {
   polkadot: {
-    rpc: "wss://rpc.polkadot.io",
     startBlock: 746095,
     symbol: "DOT",
     decimals: 10,
   },
   kusama: {
-    rpc: "wss://kusama-rpc.polkadot.io",
     startBlock: 15561,
     symbol: "KSM",
     decimals: 12,
@@ -37,15 +34,21 @@ const PRESETS: { [key: string]: Preset } = {
 
 async function main() {
   if (
-    process.argv.length !== 3 ||
+    process.argv.length !== 4 ||
     !["polkadot", "kusama"].includes(process.argv[2])
   ) {
-    console.error("Must pass exactly 1 arg: 'polkadot' or 'kusama'");
+    console.error(
+      "Must pass exactly 2 args: 'polkadot' or 'kusama', and an rpc url",
+    );
     process.exit(1);
   }
   const preset = PRESETS[process.argv[2]] as Preset;
-
-  const provider = new WsProvider(preset.rpc);
+  const rpc = process.argv[3];
+  if (!rpc) {
+    console.error("Second arg must pass rpc url");
+    process.exit(1);
+  }
+  const provider = new WsProvider(rpc);
 
   // Create the API and wait until ready
   const api = await ApiPromise.create({ provider });
