@@ -111,10 +111,18 @@ async function processBlock(
             e.event.section === "balances" &&
             e.event.method === "Reserved",
         );
-        if (reserveEvents.length !== 1) {
-          console.log(
-            "Error: Found more or less than one Reserved event for submitCandidacy extrinsic",
+        if (reserveEvents.length === 0) {
+          console.warn(
+            "Skipping because it appears it failed, no expected event was emitted with the extrinsic.",
           );
+          console.warn({ n });
+          continue;
+        }
+        if (reserveEvents.length > 1) {
+          console.log(
+            "Error: Found more than one Reserved event for submitCandidacy extrinsic",
+          );
+          console.error({ reserveEvents, n });
           process.exit(1);
         }
 
@@ -141,10 +149,18 @@ async function processBlock(
             e.event.section === "balances" &&
             e.event.method === "Unreserved",
         );
-        if (unreserveEvents.length !== 1) {
-          console.error(
-            "Found more or less than one Unreserved event for renounceCandidacy extrinsic",
+        if (unreserveEvents.length === 0) {
+          console.warn(
+            "Skipping because it appears it failed, no expected event was emitted with the extrinsic.",
           );
+          console.warn({ n });
+          continue;
+        }
+        if (unreserveEvents.length > 1) {
+          console.error(
+            "Found more than one Unreserved event for renounceCandidacy extrinsic",
+          );
+          console.error({ unreserveEvents, n });
           process.exit(1);
         }
 
