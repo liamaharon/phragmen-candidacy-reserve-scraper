@@ -12,8 +12,40 @@ import { Database } from "sqlite";
 import { BN } from "@polkadot/util";
 import { Bar, Presets } from "cli-progress";
 
+interface Preset {
+  rpc: string;
+  // the block *before* the first block with an event we want to scrape
+  startBlock: number;
+  symbol: string;
+  decimals: number;
+}
+
+const PRESETS: { [key: string]: Preset } = {
+  polkadot: {
+    rpc: "wss://rpc.polkadot.io",
+    startBlock: 746095,
+    symbol: "DOT",
+    decimals: 10,
+  },
+  kusama: {
+    rpc: "wss://kusama-rpc.polkadot.io",
+    startBlock: 15561,
+    symbol: "KSM",
+    decimals: 12,
+  },
+};
+
 async function main() {
-  const provider = new WsProvider("wss://rpc.polkadot.io");
+  if (
+    process.argv.length !== 3 ||
+    !["polkadot", "kusama"].includes(process.argv[2])
+  ) {
+    console.error("Must pass exactly 1 arg: 'polkadot' or 'kusama'");
+    process.exit(1);
+  }
+  const preset = PRESETS[process.argv[2]] as Preset;
+
+  const provider = new WsProvider(preset.rpc);
 
   // Create the API and wait until ready
   const api = await ApiPromise.create({ provider });
@@ -35,7 +67,7 @@ async function main() {
   console.log("Net reserves so far:");
   console.log(JSON.stringify(netReservesSoFar, null, 2));
 
-  const startBlock = (await getLastProcessedBlock(db)) + 1;
+  const startBlock = (await getLastProcessedBlock(db, preset.startBlock)) + 1;
   const endBlockHash = await api.rpc.chain.getFinalizedHead();
   const endBlock = (
     await api.rpc.chain.getHeader(endBlockHash)
@@ -46,6 +78,7 @@ async function main() {
     {
       format:
         "Progress [{bar}] {percentage}% | ETA: {eta_formatted} | {value}/{total}",
+      etaBuffer: 200,
     },
     Presets.shades_classic,
   );
@@ -58,9 +91,9 @@ async function main() {
 
   let curBlock = startBlock;
   while (curBlock < endBlock) {
-    const success = await processBlock(db, api, curBlock);
+    const success = await processBlock(db, api, preset, curBlock);
     if (success) {
-      progressBar.update(curBlock - startBlock + 1);
+      progressBar.increment();
       curBlock++;
     } else {
       console.log("Retrying in 60 seconds");
@@ -71,7 +104,7 @@ async function main() {
   console.log("Done scraping!");
 
   let netReserves = await fetchNetReserves(db);
-  writeToCSV(netReserves, "polkadot.csv");
+  writeToCSV(netReserves, `${api.rpc.system.chain()}.csv`);
   console.log(JSON.stringify(netReserves, null, 2));
 
   console.log("Written to csv");
@@ -84,6 +117,7 @@ async function main() {
 async function processBlock(
   db: Database<sqlite3.Database, sqlite3.Statement>,
   api: ApiPromise,
+  preset: Preset,
   n: number,
 ): Promise<boolean> {
   await db.run("BEGIN TRANSACTION");
@@ -136,7 +170,10 @@ async function processBlock(
           process.exit(1);
         }
 
-        const { amount, who } = parseAmountAndWhoFromEventData(event.data);
+        const { amount, who } = parseAmountAndWhoFromEventData(
+          event.data,
+          preset,
+        );
         await insertEvent(db, n, "reserve", amount, who);
       }
 
@@ -174,7 +211,10 @@ async function processBlock(
           process.exit(1);
         }
 
-        const { amount, who } = parseAmountAndWhoFromEventData(event.data);
+        const { amount, who } = parseAmountAndWhoFromEventData(
+          event.data,
+          preset,
+        );
         await insertEvent(db, n, "unreserve", amount, who);
       }
     }
@@ -188,7 +228,10 @@ async function processBlock(
   }
 }
 
-function parseAmountAndWhoFromEventData(eventData: any): {
+function parseAmountAndWhoFromEventData(
+  eventData: any,
+  preset: Preset,
+): {
   amount: string;
   who: string;
 } {
@@ -206,18 +249,18 @@ function parseAmountAndWhoFromEventData(eventData: any): {
   // Remove commas
   amount = amount.replace(/,/g, "");
 
-  // Check if the value ends with ' DOT' and remove the suffix if it does
-  const isDot = amount.endsWith(" DOT");
-  if (isDot) {
-    amount = amount.substring(0, amount.length - 4);
+  // Check if the value ends with ' SYMBOL' and remove the suffix if it does
+  const isDecimal = amount.endsWith(` ${preset.symbol}`);
+  if (isDecimal) {
+    amount = amount.substring(0, amount.length - preset.symbol.length + 1);
   }
 
   // Convert the string to a BigNumber
   amount = new BN(parseInt(amount));
 
-  // If the value was in DOT, convert it to Planck (multiply by 10^10)
-  if (isDot) {
-    amount = amount.mul(new BN(10).pow(new BN(10)));
+  // If the value was in decimal, convert it to Planck (multiply by 10^decimals)
+  if (isDecimal) {
+    amount = amount.mul(new BN(10).pow(new BN(preset.decimals)));
   }
 
   return {

@@ -6,7 +6,4 @@ Scrapes every candidacy-related reserve / unreserve event from the chain and sav
 
 Once all scraped, writes out a csv of any imbalances.
 
-TODO
-- [x] Support Polkadot
-- [ ] Supprot arbitrary chains
-
+Supports Polkadot and Kusama.

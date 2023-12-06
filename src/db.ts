@@ -55,12 +55,12 @@ export async function setLastProcessedBlock(
 
 export async function getLastProcessedBlock(
   db: Database<sqlite3.Database, sqlite3.Statement>,
+  default_block_number: number,
 ): Promise<number> {
   const row = await db.get<{ block_number: number }>(
     `SELECT block_number FROM last_processed_block`,
   );
-  // this is the first block number with the electionsPhragmen event on Polkadot
-  return row ? row.block_number : 746095;
+  return row ? row.block_number : default_block_number;
 }
 
 export interface NetReserveRow {
